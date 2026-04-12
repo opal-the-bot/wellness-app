@@ -1,4 +1,6 @@
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { defaultStore, loadStore, saveStore, type LogEntry, type WellnessStore } from './storage'
 
 type StatCard = {
   label: string
@@ -12,24 +14,6 @@ type TimelineItem = {
   detail: string
   tag: string
 }
-
-const dashboardStats: StatCard[] = [
-  {
-    label: 'Calories today',
-    value: '1,284',
-    hint: 'Goal 1,700 · 416 left',
-  },
-  {
-    label: 'Protein today',
-    value: '86g',
-    hint: 'Goal 110g · 24g to go',
-  },
-  {
-    label: 'Sugar today',
-    value: '29g',
-    hint: 'Mostly from matcha + yogurt',
-  },
-]
 
 const statsPageCards: StatCard[] = [
   {
@@ -59,7 +43,7 @@ const statsPageCards: StatCard[] = [
   },
 ]
 
-const timeline: TimelineItem[] = [
+const seedTimeline: TimelineItem[] = [
   {
     time: '08:10',
     title: 'Coffee logged',
@@ -92,7 +76,76 @@ const timeline: TimelineItem[] = [
   },
 ]
 
+function formatEntry(entry: LogEntry): TimelineItem {
+  return {
+    time: new Date(entry.createdAt).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }),
+    title: entry.title,
+    detail: entry.detail,
+    tag:
+      entry.type === 'meal'
+        ? 'Nutrition'
+        : entry.type === 'symptom'
+          ? 'Body'
+          : entry.type === 'workout'
+            ? 'Training'
+            : entry.type === 'supplement'
+              ? 'Routine'
+              : 'Note',
+  }
+}
+
 function App() {
+  const [store, setStore] = useState<WellnessStore>(() => loadStore())
+
+  useEffect(() => {
+    saveStore(store)
+  }, [store])
+
+  const timeline = useMemo(() => {
+    if (store.entries.length === 0) return seedTimeline
+    return [...store.entries]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(formatEntry)
+  }, [store.entries])
+
+  const summary = useMemo(() => {
+    return store.entries.reduce(
+      (acc, entry) => {
+        acc.calories += entry.metricImpact?.calories ?? 0
+        acc.protein += entry.metricImpact?.protein ?? 0
+        acc.sugar += entry.metricImpact?.sugar ?? 0
+        acc.strength += entry.metricImpact?.strength ?? 0
+        acc.cardio += entry.metricImpact?.cardio ?? 0
+        return acc
+      },
+      { calories: 0, protein: 0, sugar: 0, strength: 0, cardio: 0 },
+    )
+  }, [store.entries])
+
+  const dashboardStats: StatCard[] = [
+    {
+      label: 'Calories today',
+      value: `${summary.calories || 1284}`,
+      hint: `Goal ${store.preferences.goals.calories} · ${Math.max(store.preferences.goals.calories - summary.calories, 0) || 416} left`,
+    },
+    {
+      label: 'Protein today',
+      value: `${summary.protein || 86}g`,
+      hint: `Goal ${store.preferences.goals.protein}g · ${Math.max(store.preferences.goals.protein - summary.protein, 0) || 24}g to go`,
+    },
+    {
+      label: 'Sugar today',
+      value: `${summary.sugar || 29}g`,
+      hint: 'Tracked from logged meals',
+    },
+  ]
+
+  const resetDemo = () => setStore(defaultStore)
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -100,7 +153,7 @@ function App() {
           <p className="eyebrow">Body intelligence</p>
           <h1>Body Log</h1>
         </div>
-        <button className="ghost-button">Today</button>
+        <button className="ghost-button" onClick={resetDemo}>Reset demo</button>
       </header>
 
       <main className="phone-frame">
