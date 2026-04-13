@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { inferPrefill } from './prefill'
 import { defaultStore, loadStore, saveStore, type LogEntry, type WellnessStore } from './storage'
 
 type StatCard = {
@@ -211,6 +212,16 @@ function App() {
     setDraftDetail(preset.detail)
   }
 
+  const applySmartPrefill = (detail: string) => {
+    const inferred = inferPrefill(detail)
+    setDraftType(inferred.type)
+    if (inferred.calories) setDraftCalories(inferred.calories)
+    if (inferred.protein) setDraftProtein(inferred.protein)
+    if (inferred.sugar) setDraftSugar(inferred.sugar)
+    if (inferred.strength) setDraftStrength(inferred.strength)
+    if (inferred.cardio) setDraftCardio(inferred.cardio)
+  }
+
   const addEntry = () => {
     if (!draftTitle.trim() || !draftDetail.trim()) return
 
@@ -308,7 +319,11 @@ function App() {
               />
               <textarea
                 value={draftDetail}
-                onChange={(event) => setDraftDetail(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setDraftDetail(value)
+                  applySmartPrefill(value)
+                }}
                 placeholder="What happened?"
                 rows={4}
               />
