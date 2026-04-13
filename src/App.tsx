@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { parseDraft } from './parser'
 import { inferPrefill } from './prefill'
 import { defaultStore, loadStore, saveStore, type LogEntry, type WellnessStore } from './storage'
 
@@ -136,6 +137,7 @@ function App() {
   const [draftSugar, setDraftSugar] = useState('')
   const [draftStrength, setDraftStrength] = useState('')
   const [draftCardio, setDraftCardio] = useState('')
+  const [parsedPreview, setParsedPreview] = useState<LogEntry[]>([])
 
   useEffect(() => {
     saveStore(store)
@@ -220,6 +222,7 @@ function App() {
     if (inferred.sugar) setDraftSugar(inferred.sugar)
     if (inferred.strength) setDraftStrength(inferred.strength)
     if (inferred.cardio) setDraftCardio(inferred.cardio)
+    setParsedPreview(parseDraft(detail))
   }
 
   const addEntry = () => {
@@ -335,6 +338,17 @@ function App() {
                 <input value={draftCardio} onChange={(event) => setDraftCardio(event.target.value)} placeholder="Cardio mins" inputMode="numeric" />
               </div>
               <button className="submit-log-button" onClick={addEntry}>Save log</button>
+              {parsedPreview.length > 1 ? (
+                <div className="preview-card">
+                  <p className="assistant-label">Detected multiple events</p>
+                  {parsedPreview.map((entry) => (
+                    <div key={entry.id} className="preview-item">
+                      <strong>{entry.title}</strong>
+                      <span>{entry.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <div className="assistant-response">
