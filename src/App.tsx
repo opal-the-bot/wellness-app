@@ -103,6 +103,11 @@ function App() {
   const [draftTitle, setDraftTitle] = useState('')
   const [draftDetail, setDraftDetail] = useState('')
   const [draftType, setDraftType] = useState<LogEntry['type']>('meal')
+  const [draftCalories, setDraftCalories] = useState('')
+  const [draftProtein, setDraftProtein] = useState('')
+  const [draftSugar, setDraftSugar] = useState('')
+  const [draftStrength, setDraftStrength] = useState('')
+  const [draftCardio, setDraftCardio] = useState('')
 
   useEffect(() => {
     saveStore(store)
@@ -182,6 +187,13 @@ function App() {
       type: draftType,
       title: draftTitle.trim(),
       detail: draftDetail.trim(),
+      metricImpact: {
+        calories: Number(draftCalories) || 0,
+        protein: Number(draftProtein) || 0,
+        sugar: Number(draftSugar) || 0,
+        strength: Number(draftStrength) || 0,
+        cardio: Number(draftCardio) || 0,
+      },
     }
 
     setStore((current) => ({
@@ -190,6 +202,11 @@ function App() {
     }))
     setDraftTitle('')
     setDraftDetail('')
+    setDraftCalories('')
+    setDraftProtein('')
+    setDraftSugar('')
+    setDraftStrength('')
+    setDraftCardio('')
   }
 
   const resetDemo = () => setStore(defaultStore)
@@ -255,6 +272,13 @@ function App() {
                 placeholder="What happened?"
                 rows={4}
               />
+              <div className="metric-grid">
+                <input value={draftCalories} onChange={(event) => setDraftCalories(event.target.value)} placeholder="Calories" inputMode="numeric" />
+                <input value={draftProtein} onChange={(event) => setDraftProtein(event.target.value)} placeholder="Protein g" inputMode="numeric" />
+                <input value={draftSugar} onChange={(event) => setDraftSugar(event.target.value)} placeholder="Sugar g" inputMode="numeric" />
+                <input value={draftStrength} onChange={(event) => setDraftStrength(event.target.value)} placeholder="Strength mins" inputMode="numeric" />
+                <input value={draftCardio} onChange={(event) => setDraftCardio(event.target.value)} placeholder="Cardio mins" inputMode="numeric" />
+              </div>
               <button className="submit-log-button" onClick={addEntry}>Save log</button>
             </div>
 
