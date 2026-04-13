@@ -144,6 +144,32 @@ function App() {
     },
   ]
 
+  const updateGoal = (
+    key: keyof WellnessStore['preferences']['goals'],
+    value: number,
+  ) => {
+    setStore((current) => ({
+      ...current,
+      preferences: {
+        ...current.preferences,
+        goals: {
+          ...current.preferences.goals,
+          [key]: value,
+        },
+      },
+    }))
+  }
+
+  const updateCalorieMode = (mode: 'daily' | 'weekly') => {
+    setStore((current) => ({
+      ...current,
+      preferences: {
+        ...current.preferences,
+        calorieMode: mode,
+      },
+    }))
+  }
+
   const resetDemo = () => setStore(defaultStore)
 
   return (
@@ -250,6 +276,80 @@ function App() {
         <section className="section-block">
           <div className="section-heading">
             <div>
+              <p className="eyebrow">Onboarding</p>
+              <h3>Saved goals</h3>
+            </div>
+            <span className="section-note">Edits persist in browser storage</span>
+          </div>
+
+          <div className="onboarding-grid">
+            <div className="onboarding-card form-card">
+              <h4>Calorie mode</h4>
+              <div className="mode-switch">
+                <button
+                  className={`toggle-chip ${store.preferences.calorieMode === 'daily' ? 'active' : ''}`}
+                  onClick={() => updateCalorieMode('daily')}
+                >
+                  Daily
+                </button>
+                <button
+                  className={`toggle-chip ${store.preferences.calorieMode === 'weekly' ? 'active' : ''}`}
+                  onClick={() => updateCalorieMode('weekly')}
+                >
+                  Weekly
+                </button>
+              </div>
+            </div>
+
+            <div className="onboarding-card form-card">
+              <h4>Goals</h4>
+              <label>
+                Calories
+                <input
+                  type="number"
+                  value={store.preferences.goals.calories}
+                  onChange={(event) => updateGoal('calories', Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Protein (g)
+                <input
+                  type="number"
+                  value={store.preferences.goals.protein}
+                  onChange={(event) => updateGoal('protein', Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Sugar (g)
+                <input
+                  type="number"
+                  value={store.preferences.goals.sugar}
+                  onChange={(event) => updateGoal('sugar', Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Strength mins / week
+                <input
+                  type="number"
+                  value={store.preferences.goals.strengthMinutes}
+                  onChange={(event) => updateGoal('strengthMinutes', Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Cardio mins / week
+                <input
+                  type="number"
+                  value={store.preferences.goals.cardioMinutes}
+                  onChange={(event) => updateGoal('cardioMinutes', Number(event.target.value))}
+                />
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section className="section-block">
+          <div className="section-heading">
+            <div>
               <p className="eyebrow">Stats</p>
               <h3>Everything else</h3>
             </div>
@@ -264,48 +364,6 @@ function App() {
                 <p className="stat-hint">{stat.hint}</p>
               </article>
             ))}
-          </div>
-        </section>
-
-        <section className="section-block onboarding-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Onboarding</p>
-              <h3>Data the app should learn up front</h3>
-            </div>
-          </div>
-
-          <div className="onboarding-grid">
-            <div className="onboarding-card">
-              <h4>Profile + goals</h4>
-              <ul>
-                <li>Age</li>
-                <li>Height / weight optional</li>
-                <li>Calorie target daily or weekly</li>
-                <li>Protein, sugar, fasting goals</li>
-                <li>Strength + cardio goals</li>
-              </ul>
-            </div>
-            <div className="onboarding-card">
-              <h4>Health context</h4>
-              <ul>
-                <li>Conditions</li>
-                <li>Medications</li>
-                <li>Supplements and vitamins</li>
-                <li>Cycle history + period dates</li>
-                <li>Symptoms worth tracking</li>
-              </ul>
-            </div>
-            <div className="onboarding-card">
-              <h4>Reference library</h4>
-              <ul>
-                <li>Pantry photo uploads</li>
-                <li>Brand-specific supplements</li>
-                <li>Usual serving sizes</li>
-                <li>Preferred foods and drinks</li>
-                <li>Alcohol habits</li>
-              </ul>
-            </div>
           </div>
         </section>
       </main>
