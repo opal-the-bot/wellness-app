@@ -3,6 +3,7 @@ import './App.css'
 import { parseDraft } from './parser'
 import { inferPrefill } from './prefill'
 import { defaultStore, loadStore, saveStore, type LogEntry, type WellnessStore } from './storage'
+import { getSpeechRecognition } from './voice'
 
 type StatCard = {
   label: string
@@ -138,6 +139,7 @@ function App() {
   const [draftStrength, setDraftStrength] = useState('')
   const [draftCardio, setDraftCardio] = useState('')
   const [parsedPreview, setParsedPreview] = useState<LogEntry[]>([])
+  const [isListening, setIsListening] = useState(false)
 
   useEffect(() => {
     saveStore(store)
@@ -225,6 +227,35 @@ function App() {
     setParsedPreview(parseDraft(detail))
   }
 
+  const toggleVoice = () => {
+    const SpeechRecognitionCtor = getSpeechRecognition()
+    if (!SpeechRecognitionCtor) return
+
+    const recognition = new SpeechRecognitionCtor()
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.lang = 'en-GB'
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      setDraftDetail(transcript)
+      if (!draftTitle.trim()) setDraftTitle('Voice log')
+      applySmartPrefill(transcript)
+    }
+
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+
+    if (isListening) {
+      recognition.stop()
+      setIsListening(false)
+      return
+    }
+
+    setIsListening(true)
+    recognition.start()
+  }
+
   const addParsedEntries = () => {
     if (parsedPreview.length < 2) return
     setStore((current) => ({
@@ -297,11 +328,11 @@ function App() {
 
           <div className="capture-card">
             <div className="capture-status-row">
-              <span className="status-pill">Ready to log</span>
+              <span className="status-pill">{isListening ? 'Listening…' : 'Ready to log'}</span>
               <span className="status-meta">tap once to start · tap to stop</span>
             </div>
 
-            <button className="record-button" aria-label="Start voice log">
+            <button className="record-button" aria-label="Start voice log" onClick={toggleVoice}>
               <span className="record-ring">
                 <span className="record-core"></span>
               </span>
