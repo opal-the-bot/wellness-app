@@ -98,6 +98,33 @@ function formatEntry(entry: LogEntry): TimelineItem {
   }
 }
 
+const quickPresets = [
+  {
+    label: 'Coffee',
+    type: 'meal' as const,
+    title: 'Coffee logged',
+    detail: 'Morning coffee',
+  },
+  {
+    label: 'Meal',
+    type: 'meal' as const,
+    title: 'Meal logged',
+    detail: 'Food added to today',
+  },
+  {
+    label: 'Workout',
+    type: 'workout' as const,
+    title: 'Workout logged',
+    detail: 'Training added to today',
+  },
+  {
+    label: 'Symptom',
+    type: 'symptom' as const,
+    title: 'Symptom noted',
+    detail: 'Body signal added to today',
+  },
+]
+
 function App() {
   const [store, setStore] = useState<WellnessStore>(() => loadStore())
   const [draftTitle, setDraftTitle] = useState('')
@@ -178,6 +205,12 @@ function App() {
     }))
   }
 
+  const applyPreset = (preset: (typeof quickPresets)[number]) => {
+    setDraftType(preset.type)
+    setDraftTitle(preset.title)
+    setDraftDetail(preset.detail)
+  }
+
   const addEntry = () => {
     if (!draftTitle.trim() || !draftDetail.trim()) return
 
@@ -250,6 +283,13 @@ function App() {
             </div>
 
             <div className="log-composer">
+              <div className="preset-row">
+                {quickPresets.map((preset) => (
+                  <button key={preset.label} className="preset-chip" onClick={() => applyPreset(preset)}>
+                    + {preset.label}
+                  </button>
+                ))}
+              </div>
               <div className="mode-switch">
                 {(['meal', 'symptom', 'workout', 'supplement', 'note'] as LogEntry['type'][]).map((type) => (
                   <button

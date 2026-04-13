@@ -189,6 +189,21 @@ h4 {
   margin-bottom: 18px;
 }
 
+.preset-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.preset-chip {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5f1ea;
+  cursor: pointer;
+}
+
 .log-composer input,
 .log-composer textarea {
   width: 100%;
