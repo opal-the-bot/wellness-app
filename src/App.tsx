@@ -225,6 +225,22 @@ function App() {
     setParsedPreview(parseDraft(detail))
   }
 
+  const addParsedEntries = () => {
+    if (parsedPreview.length < 2) return
+    setStore((current) => ({
+      ...current,
+      entries: [...parsedPreview, ...current.entries],
+    }))
+    setDraftTitle('')
+    setDraftDetail('')
+    setDraftCalories('')
+    setDraftProtein('')
+    setDraftSugar('')
+    setDraftStrength('')
+    setDraftCardio('')
+    setParsedPreview([])
+  }
+
   const addEntry = () => {
     if (!draftTitle.trim() || !draftDetail.trim()) return
 
@@ -347,6 +363,9 @@ function App() {
                       <span>{entry.detail}</span>
                     </div>
                   ))}
+                  <button className="submit-log-button secondary" onClick={addParsedEntries}>
+                    Save all detected events
+                  </button>
                 </div>
               ) : null}
             </div>

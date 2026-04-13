@@ -230,6 +230,11 @@ h4 {
   cursor: pointer;
 }
 
+.submit-log-button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f1ea;
+}
+
 .preview-card {
   margin-top: 8px;
   padding: 12px;
