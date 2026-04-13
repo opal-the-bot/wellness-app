@@ -183,6 +183,32 @@ h4 {
   margin-bottom: 18px;
 }
 
+.log-composer {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.log-composer input,
+.log-composer textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5f1ea;
+  resize: vertical;
+}
+
+.submit-log-button {
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #f5f1ea;
+  color: #0d0d0d;
+  cursor: pointer;
+}
+
 .toggle-chip.active {
   background: #f5f1ea;
   color: #0d0d0d;

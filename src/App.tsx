@@ -100,6 +100,9 @@ function formatEntry(entry: LogEntry): TimelineItem {
 
 function App() {
   const [store, setStore] = useState<WellnessStore>(() => loadStore())
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftDetail, setDraftDetail] = useState('')
+  const [draftType, setDraftType] = useState<LogEntry['type']>('meal')
 
   useEffect(() => {
     saveStore(store)
@@ -170,6 +173,25 @@ function App() {
     }))
   }
 
+  const addEntry = () => {
+    if (!draftTitle.trim() || !draftDetail.trim()) return
+
+    const entry: LogEntry = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      type: draftType,
+      title: draftTitle.trim(),
+      detail: draftDetail.trim(),
+    }
+
+    setStore((current) => ({
+      ...current,
+      entries: [entry, ...current.entries],
+    }))
+    setDraftTitle('')
+    setDraftDetail('')
+  }
+
   const resetDemo = () => setStore(defaultStore)
 
   return (
@@ -208,6 +230,32 @@ function App() {
             <div className="capture-toggle">
               <button className="toggle-chip active">Voice</button>
               <button className="toggle-chip">Chat</button>
+            </div>
+
+            <div className="log-composer">
+              <div className="mode-switch">
+                {(['meal', 'symptom', 'workout', 'supplement', 'note'] as LogEntry['type'][]).map((type) => (
+                  <button
+                    key={type}
+                    className={`toggle-chip ${draftType === type ? 'active' : ''}`}
+                    onClick={() => setDraftType(type)}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                placeholder="Quick title"
+              />
+              <textarea
+                value={draftDetail}
+                onChange={(event) => setDraftDetail(event.target.value)}
+                placeholder="What happened?"
+                rows={4}
+              />
+              <button className="submit-log-button" onClick={addEntry}>Save log</button>
             </div>
 
             <div className="assistant-response">
