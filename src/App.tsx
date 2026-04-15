@@ -1,563 +1,195 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import { parseDraft } from './parser'
+import { defaultStore, loadStore, saveStore } from './storage'
 import { inferPrefill } from './prefill'
-import { defaultStore, loadStore, saveStore, type LogEntry, type WellnessStore } from './storage'
-import { getSpeechRecognition } from './voice'
-
-type StatCard = {
-  label: string
-  value: string
-  hint: string
-}
-
-type TimelineItem = {
-  time: string
-  title: string
-  detail: string
-  tag: string
-}
-
-const statsPageCards: StatCard[] = [
-  {
-    label: 'Fasting window',
-    value: '13h 20m',
-    hint: 'Last meal 8:40 pm',
-  },
-  {
-    label: 'Sleep hours',
-    value: '7.4',
-    hint: 'Bed 12:18 am · Up 7:44 am',
-  },
-  {
-    label: 'Strength mins',
-    value: '112',
-    hint: 'Weekly goal 150 min',
-  },
-  {
-    label: 'Cardio mins',
-    value: '46',
-    hint: 'Weekly goal 90 min',
-  },
-  {
-    label: 'Alcoholic drinks',
-    value: '2',
-    hint: 'This week',
-  },
-]
-
-const seedTimeline: TimelineItem[] = [
-  {
-    time: '08:10',
-    title: 'Coffee logged',
-    detail: 'Flat white with 1 tsp honey · estimated 112 cal',
-    tag: 'Nutrition',
-  },
-  {
-    time: '12:42',
-    title: 'Lunch logged',
-    detail: 'Chicken salad and fries · estimated 642 cal',
-    tag: 'Nutrition',
-  },
-  {
-    time: '14:05',
-    title: 'Symptom noted',
-    detail: 'Bloating logged after lunch',
-    tag: 'Body',
-  },
-  {
-    time: '18:30',
-    title: 'Workout logged',
-    detail: 'Lower body strength · 42 min · 5 exercises captured',
-    tag: 'Training',
-  },
-  {
-    time: '22:15',
-    title: 'Supplement logged',
-    detail: 'Magnesium glycinate saved to today',
-    tag: 'Routine',
-  },
-]
-
-function formatEntry(entry: LogEntry): TimelineItem {
-  return {
-    time: new Date(entry.createdAt).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }),
-    title: entry.title,
-    detail: entry.detail,
-    tag:
-      entry.type === 'meal'
-        ? 'Nutrition'
-        : entry.type === 'symptom'
-          ? 'Body'
-          : entry.type === 'workout'
-            ? 'Training'
-            : entry.type === 'supplement'
-              ? 'Routine'
-              : 'Note',
-  }
-}
-
-const quickPresets = [
-  {
-    label: 'Coffee',
-    type: 'meal' as const,
-    title: 'Coffee logged',
-    detail: 'Morning coffee',
-  },
-  {
-    label: 'Meal',
-    type: 'meal' as const,
-    title: 'Meal logged',
-    detail: 'Food added to today',
-  },
-  {
-    label: 'Workout',
-    type: 'workout' as const,
-    title: 'Workout logged',
-    detail: 'Training added to today',
-  },
-  {
-    label: 'Symptom',
-    type: 'symptom' as const,
-    title: 'Symptom noted',
-    detail: 'Body signal added to today',
-  },
-]
+import type { LogEntry, WellnessStore } from './types'
 
 function App() {
   const [store, setStore] = useState<WellnessStore>(() => loadStore())
-  const [draftTitle, setDraftTitle] = useState('')
-  const [draftDetail, setDraftDetail] = useState('')
-  const [draftType, setDraftType] = useState<LogEntry['type']>('meal')
-  const [draftCalories, setDraftCalories] = useState('')
-  const [draftProtein, setDraftProtein] = useState('')
-  const [draftSugar, setDraftSugar] = useState('')
-  const [draftStrength, setDraftStrength] = useState('')
-  const [draftCardio, setDraftCardio] = useState('')
-  const [parsedPreview, setParsedPreview] = useState<LogEntry[]>([])
   const [isListening, setIsListening] = useState(false)
+  const [transcript, setTranscript] = useState('')
+  const [statusMsg, setStatusMsg] = useState('')
+  const [justLogged, setJustLogged] = useState<string | null>(null)
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     saveStore(store)
   }, [store])
 
-  const timeline = useMemo(() => {
-    if (store.entries.length === 0) return seedTimeline
-    return [...store.entries]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map(formatEntry)
-  }, [store.entries])
-
   const summary = useMemo(() => {
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
     return store.entries.reduce(
       (acc, entry) => {
-        acc.calories += entry.metricImpact?.calories ?? 0
-        acc.protein += entry.metricImpact?.protein ?? 0
-        acc.sugar += entry.metricImpact?.sugar ?? 0
-        acc.strength += entry.metricImpact?.strength ?? 0
-        acc.cardio += entry.metricImpact?.cardio ?? 0
+        const ts = new Date(entry.createdAt).getTime()
+        if (ts >= todayStart) {
+          acc.calories += entry.metricImpact?.calories ?? 0
+          acc.protein += entry.metricImpact?.protein ?? 0
+          acc.sugar += entry.metricImpact?.sugar ?? 0
+        }
         return acc
       },
-      { calories: 0, protein: 0, sugar: 0, strength: 0, cardio: 0 },
+      { calories: 0, protein: 0, sugar: 0 },
     )
   }, [store.entries])
 
-  const dashboardStats: StatCard[] = [
-    {
-      label: 'Calories today',
-      value: `${summary.calories || 1284}`,
-      hint: `Goal ${store.preferences.goals.calories} · ${Math.max(store.preferences.goals.calories - summary.calories, 0) || 416} left`,
-    },
-    {
-      label: 'Protein today',
-      value: `${summary.protein || 86}g`,
-      hint: `Goal ${store.preferences.goals.protein}g · ${Math.max(store.preferences.goals.protein - summary.protein, 0) || 24}g to go`,
-    },
-    {
-      label: 'Sugar today',
-      value: `${summary.sugar || 29}g`,
-      hint: 'Tracked from logged meals',
-    },
-  ]
-
-  const updateGoal = (
-    key: keyof WellnessStore['preferences']['goals'],
-    value: number,
-  ) => {
-    setStore((current) => ({
-      ...current,
-      preferences: {
-        ...current.preferences,
-        goals: {
-          ...current.preferences.goals,
-          [key]: value,
-        },
-      },
-    }))
-  }
-
-  const updateCalorieMode = (mode: 'daily' | 'weekly') => {
-    setStore((current) => ({
-      ...current,
-      preferences: {
-        ...current.preferences,
-        calorieMode: mode,
-      },
-    }))
-  }
-
-  const applyPreset = (preset: (typeof quickPresets)[number]) => {
-    setDraftType(preset.type)
-    setDraftTitle(preset.title)
-    setDraftDetail(preset.detail)
-  }
-
-  const applySmartPrefill = (detail: string) => {
-    const inferred = inferPrefill(detail)
-    setDraftType(inferred.type)
-    if (inferred.calories) setDraftCalories(inferred.calories)
-    if (inferred.protein) setDraftProtein(inferred.protein)
-    if (inferred.sugar) setDraftSugar(inferred.sugar)
-    if (inferred.strength) setDraftStrength(inferred.strength)
-    if (inferred.cardio) setDraftCardio(inferred.cardio)
-    setParsedPreview(parseDraft(detail))
-  }
-
-  const toggleVoice = () => {
-    const SpeechRecognitionCtor = getSpeechRecognition()
-    if (!SpeechRecognitionCtor) return
-
-    const recognition = new SpeechRecognitionCtor()
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.lang = 'en-GB'
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript
-      setDraftDetail(transcript)
-      if (!draftTitle.trim()) setDraftTitle('Voice log')
-      applySmartPrefill(transcript)
-    }
-
-    recognition.onend = () => setIsListening(false)
-    recognition.onerror = () => setIsListening(false)
-
-    if (isListening) {
-      recognition.stop()
-      setIsListening(false)
-      return
-    }
-
-    setIsListening(true)
-    recognition.start()
-  }
-
-  const addParsedEntries = () => {
-    if (parsedPreview.length < 2) return
-    setStore((current) => ({
-      ...current,
-      entries: [...parsedPreview, ...current.entries],
-    }))
-    setDraftTitle('')
-    setDraftDetail('')
-    setDraftCalories('')
-    setDraftProtein('')
-    setDraftSugar('')
-    setDraftStrength('')
-    setDraftCardio('')
-    setParsedPreview([])
-  }
-
-  const addEntry = () => {
-    if (!draftTitle.trim() || !draftDetail.trim()) return
-
+  const saveEntry = (text: string) => {
+    if (!text.trim()) return
+    const inferred = inferPrefill(text)
     const entry: LogEntry = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
-      type: draftType,
-      title: draftTitle.trim(),
-      detail: draftDetail.trim(),
+      type: inferred.type ?? 'meal',
+      title: text.slice(0, 60),
+      detail: text,
       metricImpact: {
-        calories: Number(draftCalories) || 0,
-        protein: Number(draftProtein) || 0,
-        sugar: Number(draftSugar) || 0,
-        strength: Number(draftStrength) || 0,
-        cardio: Number(draftCardio) || 0,
+        calories: Number(inferred.calories) || 0,
+        protein: Number(inferred.protein) || 0,
+        sugar: Number(inferred.sugar) || 0,
+        strength: Number(inferred.strength) || 0,
+        cardio: Number(inferred.cardio) || 0,
       },
+      source: 'local',
     }
-
-    setStore((current) => ({
-      ...current,
-      entries: [entry, ...current.entries],
+    setStore((prev) => ({
+      ...prev,
+      entries: [entry, ...prev.entries],
     }))
-    setDraftTitle('')
-    setDraftDetail('')
-    setDraftCalories('')
-    setDraftProtein('')
-    setDraftSugar('')
-    setDraftStrength('')
-    setDraftCardio('')
+    const cal = entry.metricImpact?.calories
+    setJustLogged(cal && cal > 0 ? `Logged · ~${cal} cal` : 'Logged ✓')
+    setTranscript('')
+    setTimeout(() => setJustLogged(null), 3000)
   }
 
-  const resetDemo = () => setStore(defaultStore)
+  const startListening = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setStatusMsg("Voice isn't supported in this browser. Try Safari on iOS or Chrome.")
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognitionRef.current = recognition
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.lang = 'en-GB'
+
+    recognition.onstart = () => {
+      setIsListening(true)
+      setStatusMsg('Listening…')
+      setTranscript('')
+    }
+
+    recognition.onresult = (event: any) => {
+      let interim = ''
+      let final = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        if (result.isFinal) {
+          final += result[0].transcript
+        } else {
+          interim += result[0].transcript
+        }
+      }
+      setTranscript(final || interim)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+      setStatusMsg('')
+      const current = recognitionRef.current
+      if (current?._finalTranscript) {
+        saveEntry(current._finalTranscript)
+      }
+    }
+
+    recognition.onerror = (event: any) => {
+      setIsListening(false)
+      setStatusMsg(event.error === 'not-allowed'
+        ? 'Microphone access denied. Check your browser settings.'
+        : 'Something went wrong. Tap to try again.')
+    }
+
+    // Patch to capture final transcript before onend fires
+    const originalOnResult = recognition.onresult
+    recognition.onresult = (event: any) => {
+      originalOnResult?.(event)
+      let final = ''
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          final += event.results[i][0].transcript
+        }
+      }
+      if (final) recognition._finalTranscript = final
+    }
+
+    recognition.start()
+  }
+
+  const stopListening = () => {
+    recognitionRef.current?.stop()
+    setIsListening(false)
+  }
+
+  const toggleVoice = () => {
+    if (isListening) {
+      stopListening()
+    } else {
+      startListening()
+    }
+  }
+
+  const handleManualLog = () => {
+    if (transcript.trim()) {
+      saveEntry(transcript)
+    }
+  }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Body intelligence</p>
-          <h1>Body Log</h1>
+    <div className="app">
+      <div className="mic-section">
+        <button
+          className={`mic-btn ${isListening ? 'listening' : ''}`}
+          onClick={toggleVoice}
+          aria-label={isListening ? 'Stop recording' : 'Start voice log'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="currentColor"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+
+        {isListening && <p className="status-text listening-pulse">Listening…</p>}
+        {!isListening && statusMsg && <p className="status-text">{statusMsg}</p>}
+        {justLogged && <p className="status-text success">{justLogged}</p>}
+
+        {transcript && (
+          <div className="transcript-box">
+            <p className="transcript-text">{transcript}</p>
+            {!isListening && (
+              <button className="log-btn" onClick={handleManualLog}>Log this →</button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="stats-row">
+        <div className="stat">
+          <span className="stat-val">{summary.calories > 0 ? summary.calories : '–'}</span>
+          <span className="stat-lbl">cal</span>
         </div>
-        <button className="ghost-button" onClick={resetDemo}>Reset demo</button>
-      </header>
-
-      <main className="phone-frame">
-        <section className="hero-panel">
-          <div className="hero-copy">
-            <p className="eyebrow">Voice first</p>
-            <h2>Log what happened. Let the app structure it.</h2>
-            <p className="hero-text">
-              Tap once, speak naturally, and get clean tracking for calories,
-              workouts, symptoms, supplements, sleep, and more.
-            </p>
-          </div>
-
-          <div className="capture-card">
-            <div className="capture-status-row">
-              <span className="status-pill">{isListening ? 'Listening…' : 'Ready to log'}</span>
-              <span className="status-meta">tap once to start · tap to stop</span>
-            </div>
-
-            <button className="record-button" aria-label="Start voice log" onClick={toggleVoice}>
-              <span className="record-ring">
-                <span className="record-core"></span>
-              </span>
-            </button>
-
-            <div className="capture-toggle">
-              <button className="toggle-chip active">Voice</button>
-              <button className="toggle-chip">Chat</button>
-            </div>
-
-            <div className="log-composer">
-              <div className="preset-row">
-                {quickPresets.map((preset) => (
-                  <button key={preset.label} className="preset-chip" onClick={() => applyPreset(preset)}>
-                    + {preset.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mode-switch">
-                {(['meal', 'symptom', 'workout', 'supplement', 'note'] as LogEntry['type'][]).map((type) => (
-                  <button
-                    key={type}
-                    className={`toggle-chip ${draftType === type ? 'active' : ''}`}
-                    onClick={() => setDraftType(type)}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-              <input
-                value={draftTitle}
-                onChange={(event) => setDraftTitle(event.target.value)}
-                placeholder="Quick title"
-              />
-              <textarea
-                value={draftDetail}
-                onChange={(event) => {
-                  const value = event.target.value
-                  setDraftDetail(value)
-                  applySmartPrefill(value)
-                }}
-                placeholder="What happened?"
-                rows={4}
-              />
-              <div className="metric-grid">
-                <input value={draftCalories} onChange={(event) => setDraftCalories(event.target.value)} placeholder="Calories" inputMode="numeric" />
-                <input value={draftProtein} onChange={(event) => setDraftProtein(event.target.value)} placeholder="Protein g" inputMode="numeric" />
-                <input value={draftSugar} onChange={(event) => setDraftSugar(event.target.value)} placeholder="Sugar g" inputMode="numeric" />
-                <input value={draftStrength} onChange={(event) => setDraftStrength(event.target.value)} placeholder="Strength mins" inputMode="numeric" />
-                <input value={draftCardio} onChange={(event) => setDraftCardio(event.target.value)} placeholder="Cardio mins" inputMode="numeric" />
-              </div>
-              <button className="submit-log-button" onClick={addEntry}>Save log</button>
-              {parsedPreview.length > 1 ? (
-                <div className="preview-card">
-                  <p className="assistant-label">Detected multiple events</p>
-                  {parsedPreview.map((entry) => (
-                    <div key={entry.id} className="preview-item">
-                      <strong>{entry.title}</strong>
-                      <span>{entry.detail}</span>
-                    </div>
-                  ))}
-                  <button className="submit-log-button secondary" onClick={addParsedEntries}>
-                    Save all detected events
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="assistant-response">
-              <p className="assistant-label">Latest response</p>
-              <p className="assistant-body">
-                Lunch logged. Estimated 642 calories. Added chicken, fries, and
-                post-meal bloating to today.
-              </p>
-              <div className="follow-up-box">
-                <span>About what time did you have coffee this morning?</span>
-                <div className="follow-up-actions">
-                  <button>7–8 am</button>
-                  <button>8–9 am</button>
-                  <button>9–10 am</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Dashboard</p>
-              <h3>Your top widgets</h3>
-            </div>
-            <span className="section-note">Chosen during onboarding</span>
-          </div>
-
-          <div className="stats-grid primary">
-            {dashboardStats.map((stat) => (
-              <article key={stat.label} className="stat-card">
-                <p className="stat-label">{stat.label}</p>
-                <p className="stat-value">{stat.value}</p>
-                <p className="stat-hint">{stat.hint}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Today</p>
-              <h3>Daily feed</h3>
-            </div>
-            <span className="section-note">Stored with weather + cycle context</span>
-          </div>
-
-          <div className="timeline-list">
-            {timeline.map((item) => (
-              <article key={`${item.time}-${item.title}`} className="timeline-item">
-                <div className="timeline-time">{item.time}</div>
-                <div className="timeline-content">
-                  <div className="timeline-header-row">
-                    <p className="timeline-title">{item.title}</p>
-                    <span className="timeline-tag">{item.tag}</span>
-                  </div>
-                  <p className="timeline-detail">{item.detail}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Onboarding</p>
-              <h3>Saved goals</h3>
-            </div>
-            <span className="section-note">Edits persist in browser storage</span>
-          </div>
-
-          <div className="onboarding-grid">
-            <div className="onboarding-card form-card">
-              <h4>Calorie mode</h4>
-              <div className="mode-switch">
-                <button
-                  className={`toggle-chip ${store.preferences.calorieMode === 'daily' ? 'active' : ''}`}
-                  onClick={() => updateCalorieMode('daily')}
-                >
-                  Daily
-                </button>
-                <button
-                  className={`toggle-chip ${store.preferences.calorieMode === 'weekly' ? 'active' : ''}`}
-                  onClick={() => updateCalorieMode('weekly')}
-                >
-                  Weekly
-                </button>
-              </div>
-            </div>
-
-            <div className="onboarding-card form-card">
-              <h4>Goals</h4>
-              <label>
-                Calories
-                <input
-                  type="number"
-                  value={store.preferences.goals.calories}
-                  onChange={(event) => updateGoal('calories', Number(event.target.value))}
-                />
-              </label>
-              <label>
-                Protein (g)
-                <input
-                  type="number"
-                  value={store.preferences.goals.protein}
-                  onChange={(event) => updateGoal('protein', Number(event.target.value))}
-                />
-              </label>
-              <label>
-                Sugar (g)
-                <input
-                  type="number"
-                  value={store.preferences.goals.sugar}
-                  onChange={(event) => updateGoal('sugar', Number(event.target.value))}
-                />
-              </label>
-              <label>
-                Strength mins / week
-                <input
-                  type="number"
-                  value={store.preferences.goals.strengthMinutes}
-                  onChange={(event) => updateGoal('strengthMinutes', Number(event.target.value))}
-                />
-              </label>
-              <label>
-                Cardio mins / week
-                <input
-                  type="number"
-                  value={store.preferences.goals.cardioMinutes}
-                  onChange={(event) => updateGoal('cardioMinutes', Number(event.target.value))}
-                />
-              </label>
-            </div>
-          </div>
-        </section>
-
-        <section className="section-block">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Stats</p>
-              <h3>Everything else</h3>
-            </div>
-            <span className="section-note">Insights page comes later</span>
-          </div>
-
-          <div className="stats-grid secondary">
-            {statsPageCards.map((stat) => (
-              <article key={stat.label} className="stat-card muted">
-                <p className="stat-label">{stat.label}</p>
-                <p className="stat-value">{stat.value}</p>
-                <p className="stat-hint">{stat.hint}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-      </main>
+        <div className="stat">
+          <span className="stat-val">{summary.sugar > 0 ? `${summary.sugar}g` : '–'}</span>
+          <span className="stat-lbl">sugar</span>
+        </div>
+        <div className="stat">
+          <span className="stat-val">{summary.protein > 0 ? `${summary.protein}g` : '–'}</span>
+          <span className="stat-lbl">protein</span>
+        </div>
+      </div>
     </div>
   )
 }

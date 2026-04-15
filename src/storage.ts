@@ -1,28 +1,4 @@
-export type UserPreferences = {
-  dashboardMetrics: string[]
-  calorieMode: 'daily' | 'weekly'
-  goals: {
-    calories: number
-    protein: number
-    sugar: number
-    strengthMinutes: number
-    cardioMinutes: number
-  }
-}
-
-export type LogEntry = {
-  id: string
-  createdAt: string
-  type: 'meal' | 'symptom' | 'workout' | 'supplement' | 'note'
-  title: string
-  detail: string
-  metricImpact?: Partial<Record<'calories' | 'protein' | 'sugar' | 'strength' | 'cardio', number>>
-}
-
-export type WellnessStore = {
-  preferences: UserPreferences
-  entries: LogEntry[]
-}
+import type { WellnessStore } from './types'
 
 const STORAGE_KEY = 'wellness-app-store'
 
@@ -54,12 +30,23 @@ export function loadStore(): WellnessStore {
   if (typeof window === 'undefined') return defaultStore
 
   const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) return defaultStore
+  if (!raw) return structuredClone(defaultStore)
 
   try {
-    return JSON.parse(raw) as WellnessStore
+    const parsed = JSON.parse(raw) as WellnessStore
+    return {
+      preferences: {
+        ...defaultStore.preferences,
+        ...parsed.preferences,
+        goals: {
+          ...defaultStore.preferences.goals,
+          ...parsed.preferences?.goals,
+        },
+      },
+      entries: parsed.entries ?? defaultStore.entries,
+    }
   } catch {
-    return defaultStore
+    return structuredClone(defaultStore)
   }
 }
 
