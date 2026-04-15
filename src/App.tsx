@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import { defaultStore, loadStore, saveStore } from './storage'
+import { loadStore, saveStore } from './storage'
 import { inferPrefill } from './prefill'
 import type { LogEntry, WellnessStore } from './types'
 
