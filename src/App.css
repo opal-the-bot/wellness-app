@@ -86,18 +86,20 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 80, 80, 0.35); }
-  50% { box-shadow: 0 0 0 18px rgba(255, 80, 80, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 80, 80, 0.4); transform: scale(1); }
+  50% { box-shadow: 0 0 0 24px rgba(255, 80, 80, 0); transform: scale(1.03); }
 }
 
 .status-text {
   font-size: 0.9rem;
-  color: rgba(240, 237, 232, 0.5);
+  color: rgba(240, 237, 232, 0.6);
   text-align: center;
+  min-height: 1.1em;
 }
 
 .status-text.listening-pulse {
-  color: rgba(255, 120, 120, 0.85);
+  color: rgba(255, 120, 120, 0.95);
+  font-weight: 500;
 }
 
 .status-text.success {
@@ -120,6 +122,25 @@ body {
   font-size: 1rem;
   line-height: 1.5;
   color: rgba(240, 237, 232, 0.9);
+}
+
+.ai-response-card {
+  width: 100%;
+  max-width: 340px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(100, 220, 140, 0.3);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-response {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: rgba(240, 237, 232, 0.95);
+  text-align: center;
 }
 
 .log-btn {

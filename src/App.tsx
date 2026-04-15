@@ -168,7 +168,7 @@ function App() {
 
           {isListening && <p className="status-text listening-pulse">Listening…</p>}
           {!isListening && statusMsg && <p className="status-text">{statusMsg}</p>}
-          {justLogged && <p className="status-text success">{justLogged}</p>}
+          {justLogged && <div className="ai-response-card"><p className="ai-response">{justLogged}</p></div>}
 
           {transcript && (
             <div className="transcript-box">
