@@ -10,9 +10,11 @@ function App() {
   const [transcript, setTranscript] = useState('')
   const [statusMsg, setStatusMsg] = useState('')
   const [justLogged, setJustLogged] = useState<string | null>(null)
+  const [log, setLog] = useState<string[]>(['App loaded', 'Ready to log'])
   const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
+    addLog('Storage loaded')
     saveStore(store)
   }, [store])
 
@@ -55,6 +57,7 @@ function App() {
       ...prev,
       entries: [entry, ...prev.entries],
     }))
+    addLog(`Saved: ${entry.title} (${entry.metricImpact?.calories || 0} cal)`)
     const cal = entry.metricImpact?.calories
     setJustLogged(cal && cal > 0 ? `Logged · ~${cal} cal` : 'Logged ✓')
     setTranscript('')
@@ -79,6 +82,7 @@ function App() {
       setIsListening(true)
       setStatusMsg('Listening…')
       setTranscript('')
+      addLog('Listening…')
     }
 
     recognition.onresult = (event: any) => {
@@ -98,6 +102,7 @@ function App() {
     recognition.onend = () => {
       setIsListening(false)
       setStatusMsg('')
+      addLog('Stopped listening')
       const current = recognitionRef.current
       if (current?._finalTranscript) {
         saveEntry(current._finalTranscript)
@@ -109,6 +114,7 @@ function App() {
       setStatusMsg(event.error === 'not-allowed'
         ? 'Microphone access denied. Check your browser settings.'
         : 'Something went wrong. Tap to try again.')
+      addLog(`Mic error: ${event.error}`)
     }
 
     // Patch to capture final transcript before onend fires
@@ -144,6 +150,13 @@ function App() {
     if (transcript.trim()) {
       saveEntry(transcript)
     }
+  }
+
+  const addLog = (msg: string) => {
+    setLog(prev => {
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      return [`${time} — ${msg}`, ...prev.slice(0, 19)]
+    })
   }
 
   return (
@@ -192,6 +205,15 @@ function App() {
           <div className="stat">
             <span className="stat-val">{summary.protein > 0 ? `${summary.protein}g` : '–'}</span>
             <span className="stat-lbl">protein</span>
+          </div>
+        </div>
+
+        <div className="log-section">
+          <p className="log-title">Debug log</p>
+          <div className="log-list">
+            {log.map((entry, i) => (
+              <p key={i} className="log-entry">{entry}</p>
+            ))}
           </div>
         </div>
       </div>

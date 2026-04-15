@@ -188,3 +188,37 @@ body {
   letter-spacing: 0.12em;
   color: rgba(240, 237, 232, 0.4);
 }
+
+/* LOG SECTION */
+.log-section {
+  width: 100%;
+  max-width: 360px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.log-title {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(240, 237, 232, 0.4);
+  margin: 0 0 8px;
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-entry {
+  color: rgba(240, 237, 232, 0.75);
+  margin: 0;
+  line-height: 1.3;
+}
