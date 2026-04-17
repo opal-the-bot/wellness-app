@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { loadStore, saveStore } from './storage'
-import { inferPrefill } from './prefill'
+import { parseDraftOnServer } from './server'
 import type { LogEntry, WellnessStore } from './types'
 
 function App() {
@@ -13,10 +13,20 @@ function App() {
   const [log, setLog] = useState<string[]>(['App loaded', 'Ready to log'])
   const recognitionRef = useRef<any>(null)
 
+  const addLog = (msg: string) => {
+    setLog((prev) => {
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      return [`${time} · ${msg}`, ...prev.slice(0, 19)]
+    })
+  }
+
   useEffect(() => {
-    addLog('Storage loaded')
     saveStore(store)
   }, [store])
+
+  useEffect(() => {
+    addLog('Storage loaded')
+  }, [])
 
   const summary = useMemo(() => {
     const now = new Date()
@@ -35,29 +45,30 @@ function App() {
     )
   }, [store.entries])
 
-  const saveEntry = (text: string) => {
+  const saveEntry = async (text: string) => {
     if (!text.trim()) return
-    const inferred = inferPrefill(text)
+
+    addLog(`Parsing: "${text.slice(0, 40)}${text.length > 40 ? '...' : ''}"`)
+
+    const parsed = await parseDraftOnServer(text)
+    const base = parsed.entries[0]
+
     const entry: LogEntry = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
-      type: inferred.type ?? 'meal',
-      title: text.slice(0, 60),
-      detail: text,
-      metricImpact: {
-        calories: Number(inferred.calories) || 0,
-        protein: Number(inferred.protein) || 0,
-        sugar: Number(inferred.sugar) || 0,
-        strength: Number(inferred.strength) || 0,
-        cardio: Number(inferred.cardio) || 0,
-      },
-      source: 'local',
+      type: base?.type ?? 'note',
+      title: base?.title ?? 'Voice log',
+      detail: base?.detail ?? text,
+      metricImpact: base?.metricImpact ?? {},
+      source: parsed.source,
     }
+
     setStore((prev) => ({
       ...prev,
       entries: [entry, ...prev.entries],
     }))
-    addLog(`Saved: ${entry.title} (${entry.metricImpact?.calories || 0} cal)`)
+
+    addLog(`Saved via ${parsed.source}: ${entry.title}`)
     const cal = entry.metricImpact?.calories
     setJustLogged(cal && cal > 0 ? `Logged · ~${cal} cal` : 'Logged ✓')
     setTranscript('')
@@ -67,8 +78,10 @@ function App() {
   const startListening = () => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
     if (!SpeechRecognition) {
-      setStatusMsg("Voice isn't supported in this browser. Try Safari on iOS or Chrome.")
+      setStatusMsg("Voice isn't supported in this browser. Try Safari on iPhone or Chrome.")
+      addLog('Mic not supported')
       return
     }
 
@@ -90,13 +103,11 @@ function App() {
       let final = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i]
-        if (result.isFinal) {
-          final += result[0].transcript
-        } else {
-          interim += result[0].transcript
-        }
+        if (result.isFinal) final += result[0].transcript
+        else interim += result[0].transcript
       }
       setTranscript(final || interim)
+      if (final) recognition._finalTranscript = final
     }
 
     recognition.onend = () => {
@@ -105,29 +116,18 @@ function App() {
       addLog('Stopped listening')
       const current = recognitionRef.current
       if (current?._finalTranscript) {
-        saveEntry(current._finalTranscript)
+        void saveEntry(current._finalTranscript)
       }
     }
 
     recognition.onerror = (event: any) => {
       setIsListening(false)
-      setStatusMsg(event.error === 'not-allowed'
-        ? 'Microphone access denied. Check your browser settings.'
-        : 'Something went wrong. Tap to try again.')
+      setStatusMsg(
+        event.error === 'not-allowed'
+          ? 'Microphone access denied. Check browser settings.'
+          : 'Something went wrong. Tap to try again.',
+      )
       addLog(`Mic error: ${event.error}`)
-    }
-
-    // Patch to capture final transcript before onend fires
-    const originalOnResult = recognition.onresult
-    recognition.onresult = (event: any) => {
-      originalOnResult?.(event)
-      let final = ''
-      for (let i = 0; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          final += event.results[i][0].transcript
-        }
-      }
-      if (final) recognition._finalTranscript = final
     }
 
     recognition.start()
@@ -139,24 +139,14 @@ function App() {
   }
 
   const toggleVoice = () => {
-    if (isListening) {
-      stopListening()
-    } else {
-      startListening()
-    }
+    if (isListening) stopListening()
+    else startListening()
   }
 
   const handleManualLog = () => {
     if (transcript.trim()) {
-      saveEntry(transcript)
+      void saveEntry(transcript)
     }
-  }
-
-  const addLog = (msg: string) => {
-    setLog(prev => {
-      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      return [`${time} — ${msg}`, ...prev.slice(0, 19)]
-    })
   }
 
   return (
@@ -165,6 +155,7 @@ function App() {
         <div className="app-header">
           <h1>Summit</h1>
         </div>
+
         <div className="mic-section">
           <button
             className={`mic-btn ${isListening ? 'listening' : ''}`}
@@ -172,22 +163,28 @@ function App() {
             aria-label={isListening ? 'Stop recording' : 'Start voice log'}
           >
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="currentColor"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="currentColor" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
 
           {isListening && <p className="status-text listening-pulse">Listening…</p>}
           {!isListening && statusMsg && <p className="status-text">{statusMsg}</p>}
-          {justLogged && <div className="ai-response-card"><p className="ai-response">{justLogged}</p></div>}
+          {justLogged && (
+            <div className="ai-response-card">
+              <p className="ai-response">{justLogged}</p>
+            </div>
+          )}
 
           {transcript && (
             <div className="transcript-box">
               <p className="transcript-text">{transcript}</p>
               {!isListening && (
-                <button className="log-btn" onClick={handleManualLog}>Log this →</button>
+                <button className="log-btn" onClick={handleManualLog}>
+                  Log this →
+                </button>
               )}
             </div>
           )}
@@ -212,7 +209,9 @@ function App() {
           <p className="log-title">Debug log</p>
           <div className="log-list">
             {log.map((entry, i) => (
-              <p key={i} className="log-entry">{entry}</p>
+              <p key={i} className="log-entry">
+                {entry}
+              </p>
             ))}
           </div>
         </div>

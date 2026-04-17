@@ -1,6 +1,6 @@
 import { applyWellnessApiHeaders, type ApiRequest, type ApiResponse } from './_lib/http'
 import { readStore } from './_lib/localStore'
-import { readSupabaseStore } from './_lib/supabase'
+import { hasSupabaseConfig, readSupabaseStore } from './_lib/supabase'
 
 function mergeStores(
   localStore: Awaited<ReturnType<typeof readStore>>,
@@ -11,29 +11,56 @@ function mergeStores(
   const remoteEntries = remoteStore.entries ?? []
   const localEntries = localStore.entries ?? []
   const mergedEntries = [...remoteEntries]
-  const seenIds = new Set(remoteEntries.map((entry) => entry.id))
+  const seenIds = new Set<string>(remoteEntries.map((entry: { id: string }) => entry.id))
 
   for (const entry of localEntries) {
     if (seenIds.has(entry.id)) continue
     mergedEntries.push(entry)
   }
 
+  const localGoals = localStore.preferences?.goals ?? {}
+  const remoteGoals = remoteStore.preferences?.goals ?? {}
+
   return {
     preferences: {
-      ...remoteStore.preferences,
       ...localStore.preferences,
+      ...remoteStore.preferences,
+      dashboardMetrics:
+        remoteStore.preferences?.dashboardMetrics?.length
+          ? remoteStore.preferences.dashboardMetrics
+          : localStore.preferences.dashboardMetrics,
+      calorieMode: remoteStore.preferences?.calorieMode ?? localStore.preferences.calorieMode,
       goals: {
-        ...remoteStore.preferences.goals,
-        ...localStore.preferences.goals,
+        ...localGoals,
+        ...remoteGoals,
       },
     },
     entries: mergedEntries.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   }
 }
 
-export default async function handler(_req: ApiRequest, res: ApiResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   applyWellnessApiHeaders(res)
-  const [remoteStore, localStore] = await Promise.all([readSupabaseStore(), readStore()])
-  const store = mergeStores(localStore, remoteStore)
-  res.status(200).json(store)
+
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET')
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  const localStore = await readStore()
+
+  if (!hasSupabaseConfig()) {
+    res.setHeader('X-Wellness-Backend', 'local-only')
+    return res.status(200).json(localStore)
+  }
+
+  try {
+    const remoteStore = await readSupabaseStore()
+    const store = mergeStores(localStore, remoteStore)
+    res.setHeader('X-Wellness-Backend', remoteStore ? 'supabase' : 'local-fallback')
+    return res.status(200).json(store)
+  } catch {
+    res.setHeader('X-Wellness-Backend', 'supabase-error')
+    return res.status(503).json({ error: 'Supabase read failed' })
+  }
 }

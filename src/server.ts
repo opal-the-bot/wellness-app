@@ -1,66 +1,99 @@
 import type { LogEntry, ParseResult, UserPreferences, WellnessStore } from './types'
 import { defaultStore } from './storage'
-import { parseDraft } from './parser'
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+const API_ORIGIN = API_BASE || ''
+
+class ApiRequestError extends Error {
+  status?: number
+
+  constructor(message: string, status?: number) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = status
+  }
+}
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  })
+  let response: Response
+
+  try {
+    response = await fetch(`${API_ORIGIN}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+    })
+  } catch {
+    throw new ApiRequestError('Network request failed')
+  }
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
+    throw new ApiRequestError(`Request failed: ${response.status}`, response.status)
   }
 
   return (await response.json()) as T
 }
 
+async function requestJsonWithFallback<T>(
+  path: string,
+  fallback: () => T | Promise<T>,
+  init?: RequestInit,
+): Promise<T> {
+  try {
+    return await requestJson<T>(path, init)
+  } catch (error) {
+    if (error instanceof ApiRequestError && typeof error.status === 'number' && error.status !== 404) {
+      throw error
+    }
+
+    return await fallback()
+  }
+}
+
 export function hasServerBackend() {
-  return Boolean(API_BASE)
+  return true
 }
 
 export async function fetchRemoteStore(): Promise<WellnessStore> {
-  if (!hasServerBackend()) return defaultStore
-  return requestJson<WellnessStore>('/api/store')
+  return requestJsonWithFallback('/api/store', () => defaultStore)
 }
 
 export async function saveRemoteEntry(entry: LogEntry): Promise<LogEntry> {
-  if (!hasServerBackend()) {
-    return { ...entry, source: 'local' }
-  }
-
-  return requestJson<LogEntry>('/api/logs', {
+  const saved = await requestJsonWithFallback('/api/logs', () => ({ ...entry, source: 'local' as const }), {
     method: 'POST',
     body: JSON.stringify(entry),
   })
+  return saved as LogEntry
 }
 
 export async function saveRemotePreferences(preferences: UserPreferences): Promise<UserPreferences> {
-  if (!hasServerBackend()) {
-    return preferences
-  }
-
-  return requestJson<UserPreferences>('/api/preferences', {
+  return requestJsonWithFallback('/api/preferences', () => preferences, {
     method: 'POST',
     body: JSON.stringify(preferences),
   })
 }
 
 export async function parseDraftOnServer(detail: string): Promise<ParseResult> {
-  if (!hasServerBackend()) {
-    return {
-      entries: parseDraft(detail).map((entry) => ({ ...entry, source: 'local' })),
+  return requestJsonWithFallback(
+    '/api/parse',
+    () => ({
+      entries: [
+        {
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          type: 'note',
+          title: 'Voice log',
+          detail,
+          source: 'local',
+        },
+      ],
       source: 'local',
-    }
-  }
-
-  return requestJson<ParseResult>('/api/parse', {
-    method: 'POST',
-    body: JSON.stringify({ detail }),
-  })
+    }),
+    {
+      method: 'POST',
+      body: JSON.stringify({ detail }),
+    },
+  )
 }
